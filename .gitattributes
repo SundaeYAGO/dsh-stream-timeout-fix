@@ -1,0 +1,5 @@
+# Keep line endings consistent for a cross-platform Node project.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.ico binary

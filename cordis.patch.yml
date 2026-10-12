@@ -1,0 +1,14 @@
+# dsh-bundle-undici-clockfix bundle patch
+#
+# Inserts one host-side fiber that swaps the process-global undici dispatcher
+# (the one Node's built-in fetch uses, hence the one pi-ai / OpenAI SDK /
+# dsh-llm-pi-ai use) for an Agent without undici's default 300s clocks.
+#
+# Context: mid-stream silence longer than undici's default bodyTimeout (300s)
+# surfaces as `TypeError: terminated` (cause UND_ERR_BODY_TIMEOUT) and is
+# classified as TRANSPORT, even though the provider never hung up — its logs
+# show a client disconnect (e.g. HTTP 499) and it still bills the generated
+# tokens. See README for the full diagnosis and the local reproduction.
+- insert:
+    - id: undici-clockfix
+      name: 'dsh-bundle-undici-clockfix'

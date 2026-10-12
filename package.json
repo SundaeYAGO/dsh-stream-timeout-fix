@@ -1,0 +1,51 @@
+{
+  "name": "dsh-bundle-undici-clockfix",
+  "version": "1.0.0",
+  "description": "DSH host plugin: replace undici's default 300s body/headers timeouts so long silent gaps in LLM SSE streams no longer die as misleading 'TypeError: terminated' (TRANSPORT) errors.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "undici": "^8.11.2"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "undici",
+    "fetch",
+    "bodyTimeout",
+    "headersTimeout",
+    "terminated",
+    "UND_ERR_BODY_TIMEOUT",
+    "SSE",
+    "streaming",
+    "LLM",
+    "timeout",
+    "keepalive"
+  ],
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "manifestVersion": 1
+  }
+}
