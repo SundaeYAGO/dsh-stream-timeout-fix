@@ -24,6 +24,9 @@ after roughly 304–305 seconds of mid-stream silence, and get reported as a
 > unanswered, and there is no support commitment. The plugin is ~120 lines — read it
 > before you install it. See **Validation status** below for what has (and has not)
 > actually been observed.
+>
+> **Not on npm yet.** `dsh-stream-timeout-fix` has not been published to the npm
+> registry, so install it from this repository for now — see [Install](#install).
 
 ---
 
@@ -108,10 +111,38 @@ different points at a server/gateway idle limit — which this plugin does not a
 
 ## Install
 
+> **Not on npm yet.** This package has not been published to the npm registry, so
+> `npm install dsh-stream-timeout-fix` — and `dsh plugin … add dsh-stream-timeout-fix`
+> — will 404 for now. Use the repository recipe immediately below; the npm recipes
+> start working after the first publish.
+
 **Requires Node ≥ 22.19** — that is the `undici` dependency's engine requirement
 (`engines.node >= 22.19.0`). Any DSH build able to mount this plugin already bundles
 undici 8.x itself, so this matches the real deployment range; on Node 20 the import
 fails instead of silently misbehaving.
+
+### From this repository (works today)
+
+```bash
+git clone https://github.com/SundaeYAGO/dsh-stream-timeout-fix
+cd dsh-stream-timeout-fix
+npm install     # provides the `undici` dependency the plugin imports
+```
+
+Then mount the checkout as a local bundle in your profile:
+
+1. in `~/.dsh/profiles/<profile>/package.json`, add
+   `"dsh-stream-timeout-fix": "link:<absolute path to the checkout>"` to `dependencies`;
+2. append `"dsh-stream-timeout-fix"` to `dsh.profile.bundles`;
+3. install/link it in the profile directory (`pnpm install`, which creates the
+   `node_modules` link) and restart DSH.
+
+The package's own `cordis.patch.yml` mounts the plugin row, so no manual profile-patch
+edit is needed. If your DSH CLI accepts git specs (the same form other DSH plugins use),
+`dsh plugin --profile <profile> add github:SundaeYAGO/dsh-stream-timeout-fix` should
+perform those three steps for you.
+
+### From npm (after the first publish)
 
 With the DSH CLI (the bundle patch mounts the plugin row automatically — no manual
 profile patch edit):

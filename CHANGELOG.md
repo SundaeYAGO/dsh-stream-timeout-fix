@@ -5,8 +5,9 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Status of `1.0.0`:** initial release. It has not been published to npm at the time
-> of writing, and — as documented under "Validation status" in the README — it has not
+> **Status of `1.0.0`:** initial release. It has **not** been published to npm yet, so
+> install it from this repository in the meantime (README → Install → "From this
+> repository"). And — as documented under "Validation status" in the README — it has not
 > yet been exercised by a real-world 300+ s stall. The first genuine stall is the
 > acceptance test.
 

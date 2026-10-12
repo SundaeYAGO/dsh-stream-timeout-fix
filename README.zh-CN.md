@@ -22,6 +22,9 @@ TypeError: terminated        (cause: BodyTimeoutError, UND_ERR_BODY_TIMEOUT)
 > **维护声明**：作者出于**自用目的**编写，顺手开源给可能遇到同样问题的人。
 > **不保证持续维护**——issue / PR 可能不会及时处理，也没有任何支持承诺。
 > 插件本体约 120 行，安装前请自行过一遍代码。实际观测到的范围见下文「验证状态」。
+>
+> **尚未发布到 npm**：`dsh-stream-timeout-fix` 目前不在 npm registry 上，
+> 请先从本仓库安装——见[安装](#安装)一节。
 
 ---
 
@@ -96,9 +99,37 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
 
 ## 安装
 
+> **尚未发布到 npm。** 本包还没有发布到 npm registry，因此
+> `npm install dsh-stream-timeout-fix`（以及
+> `dsh plugin … add dsh-stream-timeout-fix`）目前会 404。
+> 请先用下面的「从本仓库安装」；npm 方式在首次发布之后才可用。
+
 **要求 Node ≥ 22.19**——这是 `undici` 依赖的 engines 约束（`engines.node >= 22.19.0`）。
 任何能挂载本插件的 DSH 版本本身就内置了 undici 8.x，因此这与真实部署范围一致；
 在 Node 20 上导入会直接失败，而不是悄悄行为异常。
+
+### 从本仓库安装（现在就能用）
+
+```bash
+git clone https://github.com/SundaeYAGO/dsh-stream-timeout-fix
+cd dsh-stream-timeout-fix
+npm install     # 装上插件 import 的 undici 依赖
+```
+
+然后把这份 checkout 作为本地 bundle 挂进 profile：
+
+1. 在 `~/.dsh/profiles/<profile>/package.json` 的 `dependencies` 里加
+   `"dsh-stream-timeout-fix": "link:<checkout 的绝对路径>"`；
+2. 把 `"dsh-stream-timeout-fix"` 追加进 `dsh.profile.bundles`；
+3. 在 profile 目录执行安装/链接（`pnpm install`，它会建好 `node_modules` 链接），
+   然后重启 DSH。
+
+插件自带的 `cordis.patch.yml` 会负责挂载插件行，**无需手改 profile patch**。
+如果你的 DSH CLI 接受 git 规格（其它 DSH 插件用的也是这种写法），
+`dsh plugin --profile <profile> add github:SundaeYAGO/dsh-stream-timeout-fix`
+可以替你完成上面三步。
+
+### 从 npm 安装（首次发布之后）
 
 用 DSH CLI（bundle patch 会自动挂载插件行，**无需手改 profile patch**）：
 
