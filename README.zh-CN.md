@@ -15,7 +15,7 @@ TypeError: terminated        (cause: BodyTimeoutError, UND_ERR_BODY_TIMEOUT)
 >
 > **维护声明**：作者出于**自用目的**编写，顺手开源给可能遇到同样问题的人。
 > **不保证持续维护**——issue / PR 可能不会及时处理，也没有任何支持承诺。
-> 插件本体约 120 行，安装前请自行过一遍代码。
+> 插件本体约 120 行，安装前请自行过一遍代码。实际观测到的范围见下文「验证状态」。
 
 ---
 
@@ -70,6 +70,23 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
 * 跨版本注入没问题：全局 dispatcher 存在进程级的
   `Symbol.for('undici.globalDispatcher.1')` 槽里，所以 undici 8.x 创建的 `Agent`
   会被 Node 内置 `fetch`（undici 7.x）认账。
+
+## 验证状态（信任它之前请先读）
+
+本插件是**先诊断、后编写**的：它由受控的本地复现 + 自带测试套件证明，
+而**不是**由真实场景证明的：
+
+* **本地已复现**：流在中途静默后，会在「最后字节 + 约 304 秒」处被 undici 默认时钟
+  以 `TypeError: terminated`（`UND_ERR_BODY_TIMEOUT`）杀掉；换成插件的 Agent 后，
+  同样的静默能正常读完（见 `npm test`、`scripts/reproduce-300s.mjs`）。
+* **指纹吻合**：促成这个插件的每一次线上失败，静默间隔都是 304.6–305.4 秒、
+  `message: "terminated"`，且都发生在内容开始之后、从不在响应头阶段。
+* **尚未端到端观测到**：安装之后还没有再出现过真实的 300+ 秒 stall，因此
+  「真实 stall 现在能活下来并完成」目前仍是**推断**，而不是亲眼所见的事实。
+  安装后的**第一次真实 stall 才是真正的验收测试**。
+
+若某个请求在长静默中仍然失败，请对比间隔长度：**304–305 秒**指向栈里某个 undici
+默认时钟；明显偏离则指向服务端 / 网关自己的空闲上限——那不在本插件能解决的范围内。
 
 ## 安装
 

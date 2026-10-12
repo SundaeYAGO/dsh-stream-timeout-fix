@@ -13,13 +13,24 @@
     "cordis.patch.yml",
     "README.md",
     "README.zh-CN.md",
-    "LICENSE"
+    "LICENSE",
+    "test",
+    "scripts"
   ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "prepublishOnly": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SundaeYAGO/dsh-stream-timeout-fix.git"
+  },
+  "homepage": "https://github.com/SundaeYAGO/dsh-stream-timeout-fix#readme",
+  "bugs": {
+    "url": "https://github.com/SundaeYAGO/dsh-stream-timeout-fix/issues"
   },
   "dependencies": {
     "undici": "^8.11.2"

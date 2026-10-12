@@ -39,6 +39,10 @@
  * generating (and billing) instead of the request dying at 300 s. Read
  * "Cost and billing" in README.md before installing.
  *
+ * VALIDATION: proven by controlled local reproduction and this repo's tests only.
+ * No real 300+ s stall has been observed since installation — the first genuine
+ * stall is the acceptance test. See "Validation status" in README.md.
+ *
  * Defaults are deliberately finite rather than 0, so a genuinely dead peer is
  * still reclaimed eventually:
  *

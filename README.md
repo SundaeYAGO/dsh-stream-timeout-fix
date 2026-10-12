@@ -18,7 +18,8 @@ after roughly 304–305 seconds of mid-stream silence, and get reported as a
 > **Maintenance.** Written by the author for personal use, and published in case it
 > helps someone else. It may not be actively maintained, issues and PRs may go
 > unanswered, and there is no support commitment. The plugin is ~120 lines — read it
-> before you install it.
+> before you install it. See **Validation status** below for what has (and has not)
+> actually been observed.
 
 ---
 
@@ -79,6 +80,27 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
 * Cross-version injection is fine: the global dispatcher lives in a process-wide
   `Symbol.for('undici.globalDispatcher.1')` slot, so an `Agent` created by undici
   8.x is honored by Node's built-in `fetch` (undici 7.x).
+
+## Validation status (read before trusting it)
+
+This plugin was written *after* diagnosing the failure, and it is proven by controlled
+local reproduction plus its own test suite — **not** by a real-world stall:
+
+* **Reproduced locally.** A stream that goes silent mid-body is killed by undici's
+  default clock at last-byte + ~304 s with `TypeError: terminated`
+  (`UND_ERR_BODY_TIMEOUT`); with this plugin's agent the same silence completes
+  (`npm test`, `scripts/reproduce-300s.mjs`).
+* **Fingerprint match.** Every production failure this was written for showed a
+  silence gap of 304.6–305.4 s, `message: "terminated"`, always after content had
+  started flowing, never in the headers phase.
+* **Not yet observed end-to-end.** Since installation, no real 300+ s stall has
+  occurred, so "a genuinely stalled request now survives and completes" is still an
+  inference rather than a witnessed event. The first real stall after installing is
+  the actual acceptance test.
+
+If a request still dies during a long silence, compare the gap length: **304–305 s**
+points at an undici default clock somewhere in the stack, while anything clearly
+different points at a server/gateway idle limit — which this plugin does not address.
 
 ## Install
 
