@@ -250,7 +250,13 @@ npm test
 Vibe-coded by the author, with **GLM 5.3** and **DeepSeek V4.1 Flash** driving the
 investigation and the implementation. Every claim in this README is backed by scripts
 in this repo (`npm test`, `scripts/reproduce-300s.mjs`) — run them yourself rather than
-trusting the prose. See `LICENSE` for the same note.
+trusting the prose. See
+[PROVENANCE.md](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/blob/main/PROVENANCE.md)
+for the full note.
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/blob/main/CHANGELOG.md).
 
 ## License
 

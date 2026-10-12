@@ -222,7 +222,13 @@ npm test
 
 **纯 vibe coding 产物**：调研与实现由 **GLM 5.3** 与 **DeepSeek V4.1 Flash** 驱动完成。
 README 里的每条结论背后都有本仓库可跑的脚本（`npm test`、`scripts/reproduce-300s.mjs`）
-——请自己跑一遍，而不是相信文字。同样的话也写在 `LICENSE` 里。
+——请自己跑一遍，而不是相信文字。完整说明见
+[PROVENANCE.md](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/blob/main/PROVENANCE.md)
+（模型出处放在 `LICENSE` 之外，是为了让 GitHub 能正确识别 MIT 许可）。
+
+## 更新日志
+
+见 [CHANGELOG.md](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/blob/main/CHANGELOG.md)。
 
 ## 许可
 
