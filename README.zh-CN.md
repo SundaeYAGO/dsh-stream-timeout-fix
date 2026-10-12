@@ -1,6 +1,10 @@
 # dsh-stream-timeout-fix
 
+[English](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/blob/main/README.md) · **简体中文**
+
 [![CI](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml)
+
+> 本文与英文版内容保持一致；如两版出现出入，**以英文版为准**。
 
 一个极小的 **DeepSeek Harness（DSH）** 宿主侧插件：阻止 Node 内置 `fetch` 掐死
 「长时间静默的 LLM 流」——那些在流中途静默约 **304–305 秒**后死于

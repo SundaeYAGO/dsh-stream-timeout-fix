@@ -1,5 +1,7 @@
 # dsh-stream-timeout-fix
 
+**English** · [简体中文](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/blob/main/README.zh-CN.md)
+
 [![CI](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml)
 
 A tiny **DeepSeek Harness (DSH)** host plugin that stops Node's built-in `fetch`
