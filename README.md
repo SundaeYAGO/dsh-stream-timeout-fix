@@ -1,5 +1,7 @@
 # dsh-stream-timeout-fix
 
+[![CI](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml)
+
 A tiny **DeepSeek Harness (DSH)** host plugin that stops Node's built-in `fetch`
 from killing long, silently-stalled LLM streams — the ones that die with
 
@@ -103,6 +105,11 @@ points at an undici default clock somewhere in the stack, while anything clearly
 different points at a server/gateway idle limit — which this plugin does not address.
 
 ## Install
+
+**Requires Node ≥ 22.19** — that is the `undici` dependency's engine requirement
+(`engines.node >= 22.19.0`). Any DSH build able to mount this plugin already bundles
+undici 8.x itself, so this matches the real deployment range; on Node 20 the import
+fails instead of silently misbehaving.
 
 With the DSH CLI (the bundle patch mounts the plugin row automatically — no manual
 profile patch edit):

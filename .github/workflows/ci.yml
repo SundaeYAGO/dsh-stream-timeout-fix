@@ -11,10 +11,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [20, 22, 24]
+        # Node 20 is deliberately absent: the `undici` dependency declares
+        # engines.node >= 22.19.0, so importing it on Node 20 fails (that is
+        # what broke run #1). Any DSH build that can mount this plugin already
+        # bundles undici 8.x itself, so 22/24 is the real deployment range.
+        # Keep in sync with package.json engines.
+        node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node-version }}
       - name: Install

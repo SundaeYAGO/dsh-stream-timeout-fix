@@ -1,5 +1,7 @@
 # dsh-stream-timeout-fix
 
+[![CI](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml/badge.svg)](https://github.com/SundaeYAGO/dsh-stream-timeout-fix/actions/workflows/ci.yml)
+
 一个极小的 **DeepSeek Harness（DSH）** 宿主侧插件：阻止 Node 内置 `fetch` 掐死
 「长时间静默的 LLM 流」——那些在流中途静默约 **304–305 秒**后死于
 
@@ -89,6 +91,10 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
 默认时钟；明显偏离则指向服务端 / 网关自己的空闲上限——那不在本插件能解决的范围内。
 
 ## 安装
+
+**要求 Node ≥ 22.19**——这是 `undici` 依赖的 engines 约束（`engines.node >= 22.19.0`）。
+任何能挂载本插件的 DSH 版本本身就内置了 undici 8.x，因此这与真实部署范围一致；
+在 Node 20 上导入会直接失败，而不是悄悄行为异常。
 
 用 DSH CLI（bundle patch 会自动挂载插件行，**无需手改 profile patch**）：
 
