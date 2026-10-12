@@ -1,7 +1,7 @@
 {
-  "name": "dsh-bundle-undici-clockfix",
+  "name": "dsh-stream-timeout-fix",
   "version": "1.0.0",
-  "description": "DSH host plugin: replace undici's default 300s body/headers timeouts so long silent gaps in LLM SSE streams no longer die as misleading 'TypeError: terminated' (TRANSPORT) errors.",
+  "description": "DSH host plugin for third-party/self-hosted OpenAI-compatible endpoints: replace undici's default 300s body/headers timeouts so long silent gaps in LLM SSE streams no longer die as misleading 'TypeError: terminated' (TRANSPORT) errors. No retry logic included.",
   "type": "module",
   "main": "index.js",
   "exports": {
@@ -39,7 +39,12 @@
     "streaming",
     "LLM",
     "timeout",
-    "keepalive"
+    "keepalive",
+    "litellm",
+    "vllm",
+    "self-hosted",
+    "private-deployment",
+    "vibe-coding"
   ],
   "license": "MIT",
   "dsh": {

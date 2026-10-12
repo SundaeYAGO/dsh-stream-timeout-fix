@@ -1,5 +1,5 @@
 /**
- * dsh-bundle-undici-clockfix — a DSH (DeepSeek Harness) host-side plugin.
+ * dsh-stream-timeout-fix — a DSH (DeepSeek Harness) host-side plugin.
  *
  * THE PROBLEM
  * Node's built-in fetch runs on undici, which ships two client-side clocks that
@@ -34,16 +34,21 @@
  * real guards — this plugin just stops two clocks from disagreeing about what
  * "idle" means.
  *
+ * THIS PLUGIN SHIPS NO RETRY LOGIC and talks to no endpoint. It also cannot cap
+ * or predict cost — but it does change the outcome of a stall: the provider keeps
+ * generating (and billing) instead of the request dying at 300 s. Read
+ * "Cost and billing" in README.md before installing.
+ *
  * Defaults are deliberately finite rather than 0, so a genuinely dead peer is
  * still reclaimed eventually:
  *
- *   bodyTimeoutMs      1_800_000 (30 min)   env DSH_UNDICI_BODY_TIMEOUT_MS
- *   headersTimeoutMs     600_000 (10 min)   env DSH_UNDICI_HEADERS_TIMEOUT_MS
+ *   bodyTimeoutMs      1_800_000 (30 min)   env DSH_STREAM_TIMEOUT_BODY_MS
+ *   headersTimeoutMs     600_000 (10 min)   env DSH_STREAM_TIMEOUT_HEADERS_MS
  *
  * Both can also be set per entry in the loader patch row:
  *
- *   - id: undici-clockfix
- *     name: 'dsh-bundle-undici-clockfix'
+ *   - id: stream-timeout-fix
+ *     name: 'dsh-stream-timeout-fix'
  *     config: { bodyTimeoutMs: 0, headersTimeoutMs: 600000 }
  *
  * SCOPE: the swap is process-wide — it affects `globalThis.fetch` and every
@@ -53,7 +58,7 @@
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-export const name = 'dsh-bundle-undici-clockfix'
+export const name = 'dsh-stream-timeout-fix'
 
 /** Load undici, with a best-effort fallback for installs that skip dependencies. */
 async function loadUndici() {
@@ -77,7 +82,7 @@ async function loadUndici() {
       }
     }
     const error = new Error(
-      `[undici-clockfix] cannot load undici (${err?.message ?? err}); ` +
+      `[stream-timeout-fix] cannot load undici (${err?.message ?? err}); ` +
       'install this package together with its dependencies so that "undici" resolves.',
     )
     error.cause = err
@@ -92,24 +97,24 @@ function resolveTimeouts(opts) {
   }
   const bodyTimeoutMs = Number.isFinite(opts?.bodyTimeoutMs) && opts.bodyTimeoutMs >= 0
     ? opts.bodyTimeoutMs
-    : fromEnv('DSH_UNDICI_BODY_TIMEOUT_MS', 1_800_000)
+    : fromEnv('DSH_STREAM_TIMEOUT_BODY_MS', 1_800_000)
   const headersTimeoutMs = Number.isFinite(opts?.headersTimeoutMs) && opts.headersTimeoutMs >= 0
     ? opts.headersTimeoutMs
-    : fromEnv('DSH_UNDICI_HEADERS_TIMEOUT_MS', 600_000)
+    : fromEnv('DSH_STREAM_TIMEOUT_HEADERS_MS', 600_000)
   return { bodyTimeoutMs, headersTimeoutMs }
 }
 
 export async function apply(ctx, opts) {
   const log = ctx?.logger?.info ? ctx.logger : console
-  if (globalThis.__undiciClockfix?.agent) {
-    log.info('[undici-clockfix] already applied in this process; skipping re-mount')
+  if (globalThis.__streamTimeoutFix?.agent) {
+    log.info('[stream-timeout-fix] already applied in this process; skipping re-mount')
     return
   }
   const { Agent, setGlobalDispatcher } = await loadUndici()
   const { bodyTimeoutMs, headersTimeoutMs } = resolveTimeouts(opts)
   const agent = new Agent({ bodyTimeout: bodyTimeoutMs, headersTimeout: headersTimeoutMs })
   setGlobalDispatcher(agent)
-  globalThis.__undiciClockfix = {
+  globalThis.__streamTimeoutFix = {
     agent,
     bodyTimeoutMs,
     headersTimeoutMs,
@@ -118,9 +123,9 @@ export async function apply(ctx, opts) {
     electron: process.versions?.electron ?? 'none',
   }
   log.info(
-    `[undici-clockfix] global dispatcher replaced: bodyTimeout=${bodyTimeoutMs}ms, ` +
+    `[stream-timeout-fix] global dispatcher replaced: bodyTimeout=${bodyTimeoutMs}ms, ` +
     `headersTimeout=${headersTimeoutMs}ms (undici defaults are 300000/300000); ` +
-    `node=${process.version} electron=${globalThis.__undiciClockfix.electron}`,
+    `node=${process.version} electron=${globalThis.__streamTimeoutFix.electron}`,
   )
 }
 

@@ -1,4 +1,4 @@
-# dsh-bundle-undici-clockfix bundle patch
+# dsh-stream-timeout-fix bundle patch
 #
 # Inserts one host-side fiber that swaps the process-global undici dispatcher
 # (the one Node's built-in fetch uses, hence the one pi-ai / OpenAI SDK /
@@ -10,5 +10,5 @@
 # show a client disconnect (e.g. HTTP 499) and it still bills the generated
 # tokens. See README for the full diagnosis and the local reproduction.
 - insert:
-    - id: undici-clockfix
-      name: 'dsh-bundle-undici-clockfix'
+    - id: stream-timeout-fix
+      name: 'dsh-stream-timeout-fix'

@@ -1,4 +1,4 @@
-# dsh-bundle-undici-clockfix
+# dsh-stream-timeout-fix
 
 一个极小的 **DeepSeek Harness（DSH）** 宿主侧插件：阻止 Node 内置 `fetch` 掐死
 「长时间静默的 LLM 流」——那些在流中途静默约 **304–305 秒**后死于
@@ -8,6 +8,14 @@ TypeError: terminated        (cause: BodyTimeoutError, UND_ERR_BODY_TIMEOUT)
 ```
 
 并被归类为 `TRANSPORT` 失败的请求。**而平台侧其实从未挂断我们。**
+
+> **适用场景**：面向「响应时间长、且偶尔在流中途停顿」的**第三方 / 自建
+> OpenAI 兼容端点**——例如学校、公司的私有化部署，LiteLLM 之类的网关，
+> 自托管 vLLM 等。如果你用的是行为良好的大型云 API，大概不需要它。
+>
+> **维护声明**：作者出于**自用目的**编写，顺手开源给可能遇到同样问题的人。
+> **不保证持续维护**——issue / PR 可能不会及时处理，也没有任何支持承诺。
+> 插件本体约 120 行，安装前请自行过一遍代码。
 
 ---
 
@@ -68,22 +76,22 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
 用 DSH CLI（bundle patch 会自动挂载插件行，**无需手改 profile patch**）：
 
 ```bash
-dsh plugin --profile <profile-name> add dsh-bundle-undici-clockfix
+dsh plugin --profile <profile-name> add dsh-stream-timeout-fix
 ```
 
 手动方式（在 profile 目录 `~/.dsh/profiles/<profile>`）：
 
-1. 加依赖：`"dsh-bundle-undici-clockfix": "^1.0.0"`（然后安装）；
-2. 把 `"dsh-bundle-undici-clockfix"` 追加进 `package.json` 的 `dsh.profile.bundles`。
+1. 加依赖：`"dsh-stream-timeout-fix": "^1.0.0"`（然后安装）；
+2. 把 `"dsh-stream-timeout-fix"` 追加进 `package.json` 的 `dsh.profile.bundles`。
 
 随后重启 DSH（或看你所用版本是否支持 live bundle 应用——支持时本插件会热挂载）。
 
 ## 验证
 
-* loader 里该条目为 enabled/active（`include:undici-clockfix`）；
+* loader 里该条目为 enabled/active（`include:stream-timeout-fix`）；
 * 宿主日志出现一行激活记录：
-  `[undici-clockfix] global dispatcher replaced: bodyTimeout=1800000ms, headersTimeout=600000ms ...`
-* 运行时标记：`globalThis.__undiciClockfix` 保存着装上的 `Agent`、生效超时与运行时版本；
+  `[stream-timeout-fix] global dispatcher replaced: bodyTimeout=1800000ms, headersTimeout=600000ms ...`
+* 运行时标记：`globalThis.__streamTimeoutFix` 保存着装上的 `Agent`、生效超时与运行时版本；
 * 真正的证明是被动的：下次供应商出现 300+ 秒 stall 时，请求不再被掐死。
   如果某个请求在长静默中**仍然**失败，看间隔长度——明显偏离 304–305 秒的，
   才是平台/网关自己的空闲上限，而不是这个客户端时钟。
@@ -92,10 +100,50 @@ dsh plugin --profile <profile-name> add dsh-bundle-undici-clockfix
 
 | 配置项 | 默认 | 位置 |
 |---|---|---|
-| `bodyTimeoutMs` | `1800000` | patch 行 `config`，或环境变量 `DSH_UNDICI_BODY_TIMEOUT_MS` |
-| `headersTimeoutMs` | `600000` | patch 行 `config`，或环境变量 `DSH_UNDICI_HEADERS_TIMEOUT_MS` |
+| `bodyTimeoutMs` | `1800000` | patch 行 `config`，或环境变量 `DSH_STREAM_TIMEOUT_BODY_MS` |
+| `headersTimeoutMs` | `600000` | patch 行 `config`，或环境变量 `DSH_STREAM_TIMEOUT_HEADERS_MS` |
 
 设为 `0` 表示彻底关闭该时钟（不建议全局这么做——你会失去回收死 socket 的最后手段）。
+
+## 本插件不做什么
+
+* **不含重试**。它不携带任何重试策略，也从不重发请求。重试属于 DSH 自带的重试插件
+  （`@deepseek-ai/dsh-llm-retry`），在 profile patch 里按 provider 配置——想两者都用，
+  见下面的搭配示例。
+* **不碰 provider / 鉴权 / 路由**：不挂载服务、不注册工具、不接触任何端点或密钥。
+* **不做费用控制**：它无法限额、取消或预算——请看下一节。
+* **不改服务端**：如果你的网关自己有「空闲即断」的限制，本插件帮不上；
+  该向运维方要的是服务端 SSE 注释心跳。
+
+## 费用与计费（请务必阅读）
+
+插件本身**不发任何网络请求**，自身不产生费用。但它改变了 stall 的**结果**，
+而这是有代价的：
+
+* 修复前：请求在 ~304 秒被杀，你**为压根没收到的 token 付了钱**。
+* 修复后：请求会继续等待，而 provider 仍在生成——这些 token 同样会计费。
+  你现在为**真正收到**的输出付费，但单次请求可能多花几分钟。
+* 若再配上「无限重试」策略，反复 stall 会成倍放大 token 支出
+  （多数 provider 对每次失败的尝试也计费）。请据此安排预算、盯住用量面板，
+  并尽量缩小单次产出规模。
+* 默认时钟是**有限值**（30 分钟 / 10 分钟）而非无限：真死的对端仍会被回收，
+  不会永久挂起。
+
+## 与重试策略搭配（可选，本插件不含）
+
+自动重试属于你的 profile patch（`~/.dsh/profiles/<profile>/cordis.patch.yml`），
+不属于本插件。示例（某个 provider 路由）：
+
+```yaml
+providers:
+  your-provider:
+    retryPolicy:
+      mode: always              # 无重试次数上限；不校验 retryableCodes
+      backoff: { initialDelayMs: 5000, maxDelayMs: 300000, jitterRatio: 0.25 }
+```
+
+退避间隔要照顾 provider 的速率限制（私有化部署的「每 key RPM」往往很小），
+并牢记上一节：**重试是要计费的**。
 
 ## 影响面与注意事项
 
@@ -142,6 +190,12 @@ npm test
   `UND_ERR_BODY_TIMEOUT`（即线上失败的形状）；
 * **修复**——`apply()` 之后同样的静默能读完，且全局 dispatcher 确实是本插件的 agent；
 * 外加响应头阶段存活与重复挂载幂等两项检查。
+
+## 出处（Provenance）
+
+**纯 vibe coding 产物**：调研与实现由 **GLM 5.3** 与 **DeepSeek V4.1 Flash** 驱动完成。
+README 里的每条结论背后都有本仓库可跑的脚本（`npm test`、`scripts/reproduce-300s.mjs`）
+——请自己跑一遍，而不是相信文字。同样的话也写在 `LICENSE` 里。
 
 ## 许可
 

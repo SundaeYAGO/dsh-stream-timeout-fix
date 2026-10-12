@@ -99,7 +99,7 @@ test('control: undici bodyTimeout kills a silent mid-stream response (the report
 
 test('fix: after apply(), the same silence completes and the global dispatcher is ours', async () => {
   await activate({ logger: silentLogger })
-  const applied = globalThis.__undiciClockfix
+  const applied = globalThis.__streamTimeoutFix
   assert.ok(applied?.agent, 'runtime marker is set')
   assert.equal(applied.bodyTimeoutMs, 1_800_000)
   assert.equal(applied.headersTimeoutMs, 600_000)
@@ -143,32 +143,32 @@ test('headers phase: control dies quickly, plugin agent survives', async () => {
 })
 
 test('re-mount is a no-op (idempotent)', async () => {
-  const first = globalThis.__undiciClockfix.agent
+  const first = globalThis.__streamTimeoutFix.agent
   await activate({ logger: silentLogger }, { bodyTimeoutMs: 1, headersTimeoutMs: 1 })
-  assert.equal(globalThis.__undiciClockfix.agent, first)
-  assert.equal(globalThis.__undiciClockfix.bodyTimeoutMs, 1_800_000)
+  assert.equal(globalThis.__streamTimeoutFix.agent, first)
+  assert.equal(globalThis.__streamTimeoutFix.bodyTimeoutMs, 1_800_000)
 })
 
 test('configuration: env vars are honored, explicit opts win', async () => {
-  const previous = [process.env.DSH_UNDICI_BODY_TIMEOUT_MS, process.env.DSH_UNDICI_HEADERS_TIMEOUT_MS]
+  const previous = [process.env.DSH_STREAM_TIMEOUT_BODY_MS, process.env.DSH_STREAM_TIMEOUT_HEADERS_MS]
   try {
-    delete globalThis.__undiciClockfix
-    process.env.DSH_UNDICI_BODY_TIMEOUT_MS = '1234'
-    process.env.DSH_UNDICI_HEADERS_TIMEOUT_MS = '5678'
+    delete globalThis.__streamTimeoutFix
+    process.env.DSH_STREAM_TIMEOUT_BODY_MS = '1234'
+    process.env.DSH_STREAM_TIMEOUT_HEADERS_MS = '5678'
     await activate({ logger: silentLogger })
-    assert.equal(globalThis.__undiciClockfix.bodyTimeoutMs, 1234)
-    assert.equal(globalThis.__undiciClockfix.headersTimeoutMs, 5678)
-    pluginAgent = globalThis.__undiciClockfix.agent
+    assert.equal(globalThis.__streamTimeoutFix.bodyTimeoutMs, 1234)
+    assert.equal(globalThis.__streamTimeoutFix.headersTimeoutMs, 5678)
+    pluginAgent = globalThis.__streamTimeoutFix.agent
 
-    delete globalThis.__undiciClockfix
+    delete globalThis.__streamTimeoutFix
     await activate({ logger: silentLogger }, { bodyTimeoutMs: 99, headersTimeoutMs: 98 })
-    assert.equal(globalThis.__undiciClockfix.bodyTimeoutMs, 99)
-    assert.equal(globalThis.__undiciClockfix.headersTimeoutMs, 98)
-    assert.equal(getGlobalDispatcher(), globalThis.__undiciClockfix.agent)
+    assert.equal(globalThis.__streamTimeoutFix.bodyTimeoutMs, 99)
+    assert.equal(globalThis.__streamTimeoutFix.headersTimeoutMs, 98)
+    assert.equal(getGlobalDispatcher(), globalThis.__streamTimeoutFix.agent)
   } finally {
     for (const [key, value] of [
-      ['DSH_UNDICI_BODY_TIMEOUT_MS', previous[0]],
-      ['DSH_UNDICI_HEADERS_TIMEOUT_MS', previous[1]],
+      ['DSH_STREAM_TIMEOUT_BODY_MS', previous[0]],
+      ['DSH_STREAM_TIMEOUT_HEADERS_MS', previous[1]],
     ]) {
       if (value === undefined) delete process.env[key]
       else process.env[key] = value

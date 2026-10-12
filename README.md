@@ -1,4 +1,4 @@
-# dsh-bundle-undici-clockfix
+# dsh-stream-timeout-fix
 
 A tiny **DeepSeek Harness (DSH)** host plugin that stops Node's built-in `fetch`
 from killing long, silently-stalled LLM streams — the ones that die with
@@ -9,6 +9,16 @@ TypeError: terminated        (cause: BodyTimeoutError, UND_ERR_BODY_TIMEOUT)
 
 after roughly 304–305 seconds of mid-stream silence, and get reported as a
 `TRANSPORT` failure even though the provider never hung up.
+
+> **Who this is for.** Third-party / self-hosted OpenAI-compatible endpoints whose
+> responses can take a long time and occasionally stall mid-stream: university or
+> company private deployments, LiteLLM-style gateways, self-hosted vLLM, and the
+> like. Against a well-behaved large cloud API you probably do not need it.
+>
+> **Maintenance.** Written by the author for personal use, and published in case it
+> helps someone else. It may not be actively maintained, issues and PRs may go
+> unanswered, and there is no support commitment. The plugin is ~120 lines — read it
+> before you install it.
 
 ---
 
@@ -76,23 +86,23 @@ With the DSH CLI (the bundle patch mounts the plugin row automatically — no ma
 profile patch edit):
 
 ```bash
-dsh plugin --profile <profile-name> add dsh-bundle-undici-clockfix
+dsh plugin --profile <profile-name> add dsh-stream-timeout-fix
 ```
 
 Manually, in the profile directory (`~/.dsh/profiles/<profile>`):
 
-1. add the dependency: `"dsh-bundle-undici-clockfix": "^1.0.0"` (then install), and
-2. append `"dsh-bundle-undici-clockfix"` to `dsh.profile.bundles` in `package.json`.
+1. add the dependency: `"dsh-stream-timeout-fix": "^1.0.0"` (then install), and
+2. append `"dsh-stream-timeout-fix"` to `dsh.profile.bundles` in `package.json`.
 
 Then restart DSH (or check your version's live-apply behaviour — this plugin also
 hot-mounts on profiles that support live bundle application).
 
 ## Verify
 
-* The loader lists the entry as enabled/active (`include:undici-clockfix`).
+* The loader lists the entry as enabled/active (`include:stream-timeout-fix`).
 * The host log contains one activation line:
-  `[undici-clockfix] global dispatcher replaced: bodyTimeout=1800000ms, headersTimeout=600000ms ...`
-* Runtime marker: `globalThis.__undiciClockfix` holds the installed `Agent`,
+  `[stream-timeout-fix] global dispatcher replaced: bodyTimeout=1800000ms, headersTimeout=600000ms ...`
+* Runtime marker: `globalThis.__streamTimeoutFix` holds the installed `Agent`,
   the effective timeouts, and the runtime versions.
 * The real proof is passive: the next 300+ s stall your provider has will no longer
   kill the request. If a request *does* still die during a long silence, check the
@@ -103,11 +113,54 @@ hot-mounts on profiles that support live bundle application).
 
 | Setting | Default | Where |
 |---|---|---|
-| `bodyTimeoutMs` | `1800000` | patch row `config`, or env `DSH_UNDICI_BODY_TIMEOUT_MS` |
-| `headersTimeoutMs` | `600000` | patch row `config`, or env `DSH_UNDICI_HEADERS_TIMEOUT_MS` |
+| `bodyTimeoutMs` | `1800000` | patch row `config`, or env `DSH_STREAM_TIMEOUT_BODY_MS` |
+| `headersTimeoutMs` | `600000` | patch row `config`, or env `DSH_STREAM_TIMEOUT_HEADERS_MS` |
 
 Set either to `0` to disable that clock entirely (not recommended globally — you
 lose the last-resort reclamation of dead sockets).
+
+## What this plugin does not do
+
+* **No retries.** It ships no retry policy and never re-sends a request. Retrying is
+  the job of DSH's own retry plugin (`@deepseek-ai/dsh-llm-retry`), configured per
+  provider in your profile patch — see the pairing section below if you want both.
+* **No provider, auth or routing configuration.** It mounts no service, registers no
+  tool, and touches no endpoint or credential.
+* **No cost control.** It cannot cap, cancel or budget anything — read the next section.
+* **No server-side change.** If your gateway has its own idle-connection limit, this
+  plugin will not help; ask your operator for SSE comment heartbeats instead.
+
+## Cost and billing (please read)
+
+The plugin makes **no network requests of its own** and adds no cost by itself. But it
+changes the *outcome* of a stall, and that has a price:
+
+* Before: the request was killed at ~304 s, and you paid for tokens you never received.
+* After: the request keeps waiting while the provider keeps generating — and the
+  provider bills those tokens. You now pay for output you actually receive, and the
+  request may take minutes longer.
+* Combined with an unlimited retry policy, repeated stalls can multiply token spend
+  (most providers bill every failed attempt too). Budget accordingly, watch your usage
+  dashboard, and prefer smaller outputs.
+* The clocks are finite on purpose (30 min / 10 min): a genuinely dead peer is still
+  reclaimed instead of hanging forever.
+
+## Pairing with a retry policy (optional, not shipped)
+
+Automatic retries belong to your profile patch
+(`~/.dsh/profiles/<profile>/cordis.patch.yml`), not to this plugin. Example for a
+provider route:
+
+```yaml
+providers:
+  your-provider:
+    retryPolicy:
+      mode: always              # no retry cap; ignores retryableCodes
+      backoff: { initialDelayMs: 5000, maxDelayMs: 300000, jitterRatio: 0.25 }
+```
+
+Choose delays that respect your provider's rate limit (institutional deployments often
+have a small per-key RPM), and keep the cost note above in mind: **retries are billed**.
 
 ## Scope and caveats
 
@@ -160,6 +213,13 @@ npm test
 * **fix** — after `apply()`, the same silence completes, and the global dispatcher
   is verified to be this plugin's agent;
 * plus header-phase survival and idempotent re-mount checks.
+
+## Provenance
+
+Vibe-coded by the author, with **GLM 5.3** and **DeepSeek V4.1 Flash** driving the
+investigation and the implementation. Every claim in this README is backed by scripts
+in this repo (`npm test`, `scripts/reproduce-300s.mjs`) — run them yourself rather than
+trusting the prose. See `LICENSE` for the same note.
 
 ## License
 
