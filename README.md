@@ -229,6 +229,15 @@ have a small per-key RPM), and keep the cost note above in mind: **retries are b
 * **Process-wide by design.** Every `fetch` in the DSH host process (all
   providers, other plugins) loses the 300 s default ceiling and inherits the
   configured one. That is the point, but it is a real blast radius.
+* **Cross-version dispatcher reports are tested, not assumed.** Several upstream
+  discussions (`#7721`, `#7671`, `#7598`, `#7468`, `#7502`) blame a *userland*
+  undici 8.x dispatcher in the process-global slot for breaking content-encoding and
+  response headers on Node's built-in fetch (bundled undici 7.x) — the same slot
+  this plugin swaps. `scripts/check-content-encoding.mjs` (part of `npm test`)
+  verifies gzip decoding **before and after** the swap; it passes on Node 24.21 with
+  undici 8.11.2. If you ever see raw gzip/brotli or missing headers after
+  installing, disable the plugin and report your `node -v` plus
+  `process.versions.undici` pair.
 * **Not a cure for upstream stalls.** If your provider pauses for minutes, the
   request still takes minutes. Pair this with a retry policy, and prefer smaller
   outputs so a stall costs less.

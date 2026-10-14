@@ -207,6 +207,13 @@ providers:
 
 * **按设计是进程级的**：宿主进程里所有 `fetch`（全部 provider、其他插件）都不再受
   300 秒默认上限约束，改用你配置的值。这正是目的，但影响面确实存在。
+* **跨版本 dispatcher 的已知报告，我们实测而不是想当然**：上游有多条讨论
+  （`#7721`、`#7671`、`#7598`、`#7468`、`#7502`）把「userland undici 8.x 的 dispatcher
+  装进进程全局槽位」归咎为 Node 内置 fetch（内置 undici 7.x）丢失 content-encoding
+  解压与响应头的原因——那正是本插件动的同一个槽位。`scripts/check-content-encoding.mjs`
+  （已并入 `npm test`）在**换 dispatcher 前后**各验一次 gzip 解码；在 Node 24.21 +
+  undici 8.11.2 上通过。若安装后真的遇到裸 gzip/brotli 或响应头异常，请先停用本插件，
+  并附上 `node -v` 与 `process.versions.undici` 一起反馈。
 * **治不了上游 stall**：供应商若停顿数分钟，请求就得等数分钟。请配合重试策略，
   并尽量让单次产出小一些，降低 stall 的代价。
 * **客户端保活不存在**：HTTP/1.1 下 POST 请求体发完后，客户端在该请求上没有任何

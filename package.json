@@ -23,7 +23,7 @@
     "node": ">=22.19.0"
   },
   "scripts": {
-    "test": "node --test",
+    "test": "node --test && node scripts/check-content-encoding.mjs",
     "prepublishOnly": "npm test"
   },
   "repository": {

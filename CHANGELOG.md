@@ -54,6 +54,11 @@ provider that hung up.
   (`link:` / checkout installs).
 - Moved the model-provenance note out of `LICENSE` into `PROVENANCE.md`, so GitHub
   detects the MIT license correctly.
+- Added `scripts/check-content-encoding.mjs` and wired it into `npm test`: it verifies
+  that swapping the global dispatcher does **not** break content-encoding decoding on
+  Node's built-in fetch, the cross-version trap reported upstream in discussions
+  `#7721` / `#7671` / `#7598` / `#7468` / `#7502`. Passes on Node 24.21 with
+  undici 8.11.2.
 
 ### Fixed
 
