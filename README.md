@@ -100,14 +100,28 @@ local reproduction plus its own test suite — **not** by a real-world stall:
 * **Fingerprint match.** Every production failure this was written for showed a
   silence gap of 304.6–305.4 s, `message: "terminated"`, always after content had
   started flowing, never in the headers phase.
-* **Not yet observed end-to-end.** Since installation, no real 300+ s stall has
-  occurred, so "a genuinely stalled request now survives and completes" is still an
-  inference rather than a witnessed event. The first real stall after installing is
-  the actual acceptance test.
+* **Field data, 2026-10-13 → 2026-10-18.** Across 19 recorded failures in 11 sessions
+  (structural count from `stream finish` events, not log text), the targeted class —
+  `TRANSPORT` whose cause chain is `TypeError: terminated` → `BodyTimeoutError`
+  (`UND_ERR_BODY_TIMEOUT`) — **did not recur once**. What remains is AUTH / `SERVER 503`
+  / `INVALID_REQUEST 404` / `EMPTY_RESPONSE`, plus the wall described in the next bullet.
+* **The remaining 300 s wall belongs to DSH, not undici.** On 2026-10-18 two attempts
+  were cut at exactly **300.02 s** and **300.04 s** with
+  `pi-ai stream idle timeout after 300000ms` (`code: TIMEOUT`) while this plugin's
+  undici ceiling was already 30 min — because `streamIdleTimeoutMs` was unset on that
+  route and defaults to `300000`. So the silence ceiling is still 300 s until you raise
+  it (see “Raise `streamIdleTimeoutMs` as well”). The upside: the error is now the honest
+  `TIMEOUT` instead of a misleading `TRANSPORT`.
+* **Still not a witnessed survival.** A **314.23 s** request did complete on 2026-10-18
+  (input 438,236 / output 3,791 tokens, server-side duration), but its **longest silence
+  was ~210 s** — below the old 300 s ceiling — so it would have succeeded without this
+  plugin. The acceptance test is unchanged: one silence gap **longer than 300 s** that
+  completes end-to-end, which also requires `streamIdleTimeoutMs` to be raised.
 
 If a request still dies during a long silence, compare the gap length: **304–305 s**
-points at an undici default clock somewhere in the stack, while anything clearly
-different points at a server/gateway idle limit — which this plugin does not address.
+points at an undici default clock somewhere in the stack, **exactly 300 s** with
+`pi-ai stream idle timeout` points at DSH's own watchdog, and anything else points at a
+server/gateway idle limit — which this plugin does not address.
 
 ## Install
 
@@ -191,6 +205,31 @@ lose the last-resort reclamation of dead sockets).
 * **No cost control.** It cannot cap, cancel or budget anything — read the next section.
 * **No server-side change.** If your gateway has its own idle-connection limit, this
   plugin will not help; ask your operator for SSE comment heartbeats instead.
+* **No change to DSH's own stream watchdog.** `streamIdleTimeoutMs` is per-route
+  configuration (`dsh-llm-pi-ai`), not something a dispatcher swap can touch — see
+  “Raise `streamIdleTimeoutMs` as well”.
+
+## Raise `streamIdleTimeoutMs` as well (needed for >300 s silences)
+
+This plugin only removes **undici's** 300 s clocks. DSH's own per-route watchdog still
+cuts a silent stream at `streamIdleTimeoutMs` (default `300000`), reporting
+`pi-ai stream idle timeout after 300000ms` with `code: TIMEOUT`.
+
+That is not theory: on 2026-10-18 two attempts died at exactly **300.02 s** and
+**300.04 s** with this plugin active (undici ceiling already 30 min), because
+`streamIdleTimeoutMs` was unset on the route. Without raising it, the plugin improves
+the *diagnosis* (honest `TIMEOUT` instead of `TRANSPORT`) but does **not** extend how
+long a silence can last.
+
+```yaml
+providers:
+  your-provider:
+    streamIdleTimeoutMs: 1800000   # 30 min — must exceed the longest stall you want to survive
+```
+
+Note that pi-ai counts silence **from request dispatch, including the wait for the
+first token**: a huge prompt with a slow prefill consumes the same budget as a
+mid-stream stall. (Same profile patch as the retry policy below — different key.)
 
 ## Cost and billing (please read)
 

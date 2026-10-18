@@ -90,9 +90,26 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
   同样的静默能正常读完（见 `npm test`、`scripts/reproduce-300s.mjs`）。
 * **指纹吻合**：促成这个插件的每一次线上失败，静默间隔都是 304.6–305.4 秒、
   `message: "terminated"`，且都发生在内容开始之后、从不在响应头阶段。
-* **尚未端到端观测到**：安装之后还没有再出现过真实的 300+ 秒 stall，因此
-  「真实 stall 现在能活下来并完成」目前仍是**推断**，而不是亲眼所见的事实。
-  安装后的**第一次真实 stall 才是真正的验收测试**。
+* **现场数据（2026-10-13 → 2026-10-18）**：11 个会话里共 19 次记录在案的失败
+  （按 `stream finish` 事件结构统计，不是按日志文本），**目标失败类一次都没有复现**——
+  即 `TRANSPORT` 且 cause 链为 `TypeError: terminated` → `BodyTimeoutError`
+  （`UND_ERR_BODY_TIMEOUT`）。剩下的全是 AUTH / `SERVER 503` / `INVALID_REQUEST 404` /
+  `EMPTY_RESPONSE`，以及下一条说的新墙。
+* **剩下的 300 秒墙属于 DSH，不属于 undici**。2026-10-18 有两次尝试分别在
+  **300.02 秒**与 **300.04 秒**被 `pi-ai stream idle timeout after 300000ms`
+  （`code: TIMEOUT`）切断——而此时本插件的 undici 上限已经是 30 分钟。原因：那条路由
+  没有设置 `streamIdleTimeoutMs`，走默认 `300000`。所以**在把它调大之前，静默上限仍然是
+  300 秒**（见「同时调大 `streamIdleTimeoutMs`」）。好处是：错误码从此是诚实的
+  `TIMEOUT`，不再是误导性的 `TRANSPORT`。
+* **仍不是"亲眼看到它挺过去"**。2026-10-18 确实有一条 **314.23 秒**的请求成功
+  （平台侧时长，输入 438,236 / 输出 3,791 tokens），但它**最长静默约 210 秒**——
+  低于旧的 300 秒上限，所以**没有这个插件它也会成功**。验收测试依旧没变：
+  需要**一次超过 300 秒的静默间隔**端到端跑完，而那同时要求把
+  `streamIdleTimeoutMs` 调大。
+
+若某个请求在长静默中仍然失败，请对比间隔长度：**304–305 秒**指向栈里某个 undici 默认
+时钟；**恰好 300 秒**且报 `pi-ai stream idle timeout` 指向 DSH 自己的看门狗；
+其他数值则指向服务端/网关的空闲上限——那不在本插件能解决的范围内。
 
 若某个请求在长静默中仍然失败，请对比间隔长度：**304–305 秒**指向栈里某个 undici
 默认时钟；明显偏离则指向服务端 / 网关自己的空闲上限——那不在本插件能解决的范围内。
@@ -172,6 +189,29 @@ dsh plugin --profile <profile-name> add dsh-stream-timeout-fix
 * **不做费用控制**：它无法限额、取消或预算——请看下一节。
 * **不改服务端**：如果你的网关自己有「空闲即断」的限制，本插件帮不上；
   该向运维方要的是服务端 SSE 注释心跳。
+* **不改 DSH 自己的流看门狗**：`streamIdleTimeoutMs` 是「按路由」的配置
+  （`dsh-llm-pi-ai`），换 dispatcher 动不了它——见下一节。
+
+## 同时调大 `streamIdleTimeoutMs`（要挺过 300+ 秒静默就必须做）
+
+本插件只摘掉 **undici 的** 300 秒时钟。DSH 自己按路由的看门狗仍会在
+`streamIdleTimeoutMs`（默认 `300000`）处切断静默流，报
+`pi-ai stream idle timeout after 300000ms`（`code: TIMEOUT`）。
+
+这不是理论：2026-10-18 有两次尝试分别死在 **300.02 秒**与 **300.04 秒**，
+而当时本插件已生效（undici 上限已是 30 分钟）——因为那条路由没有设
+`streamIdleTimeoutMs`。不调大它，本插件只改善**诊断**（诚实的 `TIMEOUT`
+取代误导性的 `TRANSPORT`），并**不会**延长可容忍的静默时长。
+
+```yaml
+providers:
+  your-provider:
+    streamIdleTimeoutMs: 1800000   # 30 分钟——必须大于你想挺过的最长 stall
+```
+
+注意 pi-ai 的计时**从请求下发开始，含首个 token 之前的等待**：巨大 prompt 的
+慢预填充与流中途停顿消耗的是同一份预算。（和下面的重试策略在同一个 profile
+patch 里，只是不同的键。）
 
 ## 费用与计费（请务必阅读）
 

@@ -71,11 +71,20 @@ provider that hung up.
 - "Who this is for": third-party / self-hosted OpenAI-compatible endpoints (university
   or company private deployments, LiteLLM-style gateways), plus a maintenance
   disclaimer — a personal-use project with no support commitment.
-- "Validation status": proven by controlled local reproduction and the test suite only;
-  no real 300+ s stall has been observed since installation.
+- "Validation status": proven by controlled local reproduction and the test suite, now
+  with field data from 2026-10-13 → 2026-10-18 (19 recorded failures, structural count):
+  the targeted `TRANSPORT` / `TypeError: terminated` / `UND_ERR_BODY_TIMEOUT` class did
+  not recur; two >300 s silences were instead cut at exactly 300.02 s and 300.04 s by
+  DSH's own watchdog (`pi-ai stream idle timeout after 300000ms`); a 314.23 s request
+  completed with ~210 s of max silence, which is **not** proof of the fix.
+- "Raise `streamIdleTimeoutMs` as well": documents that this plugin only removes
+  undici's clocks, and that the per-route `streamIdleTimeoutMs` (default `300000`) must
+  be raised too before a >300 s silence can survive — otherwise only the error code
+  improves (honest `TIMEOUT` instead of `TRANSPORT`).
 - "What this plugin does not do" (no retry logic, no provider/auth/routing
-  configuration, no cost control) and "Cost and billing": a surviving stall keeps the
-  provider generating and billing, and unlimited retries multiply token spend.
+  configuration, no cost control, no stream-watchdog change) and "Cost and billing": a
+  surviving stall keeps the provider generating and billing, and unlimited retries
+  multiply token spend.
 - "Pairing with a retry policy (optional, not shipped)" with a profile-patch example.
 - "Provenance": vibe-coded with GLM 5.3 and DeepSeek V4.1 Flash — see
   [PROVENANCE.md](PROVENANCE.md).
