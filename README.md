@@ -112,11 +112,29 @@ local reproduction plus its own test suite — **not** by a real-world stall:
   route and defaults to `300000`. So the silence ceiling is still 300 s until you raise
   it (see “Raise `streamIdleTimeoutMs` as well”). The upside: the error is now the honest
   `TIMEOUT` instead of a misleading `TRANSPORT`.
-* **Still not a witnessed survival.** A **314.23 s** request did complete on 2026-10-18
-  (input 438,236 / output 3,791 tokens, server-side duration), but its **longest silence
-  was ~210 s** — below the old 300 s ceiling — so it would have succeeded without this
-  plugin. The acceptance test is unchanged: one silence gap **longer than 300 s** that
-  completes end-to-end, which also requires `streamIdleTimeoutMs` to be raised.
+* **Still not a witnessed survival — and now measured, not guessed.** Two long requests
+  completed without ever stalling:
+  * **2026-10-18, 314.23 s** (input 438,236 / output 3,791): longest silence **~210 s**,
+    below the old ceiling.
+  * **2026-10-19, 756.84 s** (input 512,276 / output 17,083, 9,006 per-token
+    timestamps): first byte after **91.2 s**, then **max inter-chunk gap 2.6 s** — a
+    continuously flowing 12.6-minute generation. Long, but not a stall, so it is *not*
+    evidence either.
+
+  A full audit of **9,724 attempts across every session on this machine** finds **zero**
+  attempts with an inter-chunk gap ≥ 300 s. The largest silence ever measured is
+  **277.0 s** (2026-10-12, *before* the plugin, and it succeeded), while the nine
+  pre-fix failures died at **304.6–305.4 s**. Those two numbers bracket undici's 300 s
+  default almost exactly — which is the mechanism, demonstrated from both sides.
+
+  So the acceptance test is still open: one silence gap **> 300 s** that completes
+  end-to-end. It also needs `streamIdleTimeoutMs` raised (see the section below).
+  `scripts/audit-session-gaps.mjs` answers the question in one command:
+
+  ```bash
+  node scripts/audit-session-gaps.mjs ~/.dsh/sessions --min-gap-s=250
+  # -> lists attempts by largest inter-chunk gap, and how many reached >= 300 s
+  ```
 
 If a request still dies during a long silence, compare the gap length: **304–305 s**
 points at an undici default clock somewhere in the stack, **exactly 300 s** with

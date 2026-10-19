@@ -38,6 +38,10 @@ provider that hung up.
   configuration precedence.
 - `scripts/reproduce-300s.mjs`: the full ~304 s reproduction with the default dispatcher,
   and a `--plugin` mode that survives it.
+- `scripts/audit-session-gaps.mjs`: measures the **true** inter-chunk gap of any DSH
+  attempt by expanding the per-token timestamps (`time0` + cumulative `dt[]`) that DSH
+  0.2.1+ records, lists attempts by largest gap, and reports how many reached ≥ 300 s.
+  This is what separates "a long request" from "a stall that was survived".
 - Bilingual documentation (English + 简体中文) with a language switcher.
 - GitHub Actions CI on Node 22 and 24, with `prepublishOnly` gating `npm publish` on the
   test suite.
@@ -72,11 +76,15 @@ provider that hung up.
   or company private deployments, LiteLLM-style gateways), plus a maintenance
   disclaimer — a personal-use project with no support commitment.
 - "Validation status": proven by controlled local reproduction and the test suite, now
-  with field data from 2026-10-13 → 2026-10-18 (19 recorded failures, structural count):
-  the targeted `TRANSPORT` / `TypeError: terminated` / `UND_ERR_BODY_TIMEOUT` class did
-  not recur; two >300 s silences were instead cut at exactly 300.02 s and 300.04 s by
-  DSH's own watchdog (`pi-ai stream idle timeout after 300000ms`); a 314.23 s request
-  completed with ~210 s of max silence, which is **not** proof of the fix.
+  with field data from 2026-10-13 → 2026-10-19 (structural count): the targeted
+  `TRANSPORT` / `TypeError: terminated` / `UND_ERR_BODY_TIMEOUT` class did not recur;
+  two >300 s silences were cut at exactly 300.02 s and 300.04 s by DSH's own watchdog
+  (`pi-ai stream idle timeout after 300000ms`); a 314.23 s request completed with ~210 s
+  of max silence, and a 756.84 s request on 2026-10-19 completed with a **2.6 s** max
+  inter-chunk gap (continuous streaming — long, but not a stall). A full audit of
+  **9,724 attempts** found **no** attempt with a ≥ 300 s gap; the largest ever measured
+  is **277.0 s** (2026-10-12, before the plugin, and it succeeded) against the nine
+  pre-fix failures at **304.6–305.4 s** — a bracket around undici's 300 s default.
 - "Raise `streamIdleTimeoutMs` as well": documents that this plugin only removes
   undici's clocks, and that the per-route `streamIdleTimeoutMs` (default `300000`) must
   be raised too before a >300 s silence can survive — otherwise only the error code
