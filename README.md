@@ -22,11 +22,11 @@ after roughly 304–305 seconds of mid-stream silence, and get reported as a
 > **Maintenance.** Written by the author for personal use, and published in case it
 > helps someone else. It may not be actively maintained, issues and PRs may go
 > unanswered, and there is no support commitment. The plugin is ~120 lines — read it
-> before you install it. See **Validation status** below for what has (and has not)
-> actually been observed.
+> before you install it. See **Validation status** below: the fix is confirmed by a real
+> 607 s silence that survived end-to-end.
 >
-> **Not on npm yet.** `dsh-stream-timeout-fix` has not been published to the npm
-> registry, so install it from this repository for now — see [Install](#install).
+> **Distribution.** There is no npm package — this is a small single-purpose patch and
+> does not warrant one. Install straight from this repository; see [Install](#install).
 
 ---
 
@@ -88,11 +88,17 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
   `Symbol.for('undici.globalDispatcher.1')` slot, so an `Agent` created by undici
   8.x is honored by Node's built-in `fetch` (undici 7.x).
 
-## Validation status (read before trusting it)
+## Validation status — confirmed effective
 
-This plugin was written *after* diagnosing the failure, and it is proven by controlled
-local reproduction plus its own test suite — **not** by a real-world stall:
+The failure this plugin targets is gone, and a real >300 s silence has now survived
+end-to-end. In order of evidential strength:
 
+* **Confirmed in the field (2026-10-28).** One attempt sat silent for **607.1 s**
+  mid-stream (`21:56:49 → 22:06:57`), was **not** retried even once, and completed
+  normally (`tool-calls`, 754.0 s total, 18,156 output tokens). Both undici's
+  `bodyTimeout` **and** pi-ai's `streamIdleTimeoutMs` had to be raised for that to
+  happen: with either left at its 300 s default the request would have died at
+  ~300–304 s. This is the acceptance test, passed.
 * **Reproduced locally.** A stream that goes silent mid-body is killed by undici's
   default clock at last-byte + ~304 s with `TypeError: terminated`
   (`UND_ERR_BODY_TIMEOUT`); with this plugin's agent the same silence completes
@@ -100,52 +106,32 @@ local reproduction plus its own test suite — **not** by a real-world stall:
 * **Fingerprint match.** Every production failure this was written for showed a
   silence gap of 304.6–305.4 s, `message: "terminated"`, always after content had
   started flowing, never in the headers phase.
-* **Field data, 2026-10-13 → 2026-10-18.** Across 19 recorded failures in 11 sessions
-  (structural count from `stream finish` events, not log text), the targeted class —
-  `TRANSPORT` whose cause chain is `TypeError: terminated` → `BodyTimeoutError`
-  (`UND_ERR_BODY_TIMEOUT`) — **did not recur once**. What remains is AUTH / `SERVER 503`
-  / `INVALID_REQUEST 404` / `EMPTY_RESPONSE`, plus the wall described in the next bullet.
-* **The remaining 300 s wall belongs to DSH, not undici.** On 2026-10-18 two attempts
-  were cut at exactly **300.02 s** and **300.04 s** with
-  `pi-ai stream idle timeout after 300000ms` (`code: TIMEOUT`) while this plugin's
-  undici ceiling was already 30 min — because `streamIdleTimeoutMs` was unset on that
-  route and defaults to `300000`. So the silence ceiling is still 300 s until you raise
-  it (see “Raise `streamIdleTimeoutMs` as well”). The upside: the error is now the honest
-  `TIMEOUT` instead of a misleading `TRANSPORT`.
-* **Still not a witnessed survival — and now measured, not guessed.** Two long requests
-  completed without ever stalling:
-  * **2026-10-18, 314.23 s** (input 438,236 / output 3,791): longest silence **~210 s**,
-    below the old ceiling.
-  * **2026-10-19, 756.84 s** (input 512,276 / output 17,083, 9,006 per-token
-    timestamps): first byte after **91.2 s**, then **max inter-chunk gap 2.6 s** — a
-    continuously flowing 12.6-minute generation. Long, but not a stall, so it is *not*
-    evidence either.
+* **Field data, 2026-10-13 → 2026-10-28.** Across the recorded failures since
+  installation (structural count from `stream finish` events, not log text), the
+  targeted class — `TRANSPORT` whose cause chain is `TypeError: terminated` →
+  `BodyTimeoutError` (`UND_ERR_BODY_TIMEOUT`) — **did not recur once**. What remains is
+  AUTH / `SERVER 503` / `INVALID_REQUEST 404` / `EMPTY_RESPONSE` / `TIMEOUT`, and the
+  `TIMEOUT`s are the *other* clocks, not undici.
+* **The 300 s window is bracketed from both sides.** A full audit of **9,724 attempts
+  across every session on this machine** (through 2026-10-19) found **no** attempt with
+  an inter-chunk gap ≥ 300 s back then: the largest surviving silence was **277.0 s**
+  (2026-10-12, *before* the plugin), while the nine pre-fix failures died at
+  **304.6–305.4 s**. After the raise, 607.1 s survived (first bullet).
+* **The remaining ceilings are DSH-side and documented, not undici.**
+  * 2026-10-18: two attempts cut at exactly **300.02 s** / **300.04 s** by
+    `pi-ai stream idle timeout after 300000ms` — the route's `streamIdleTimeoutMs` was
+    unset (default `300000`). Raise it: see “Raise `streamIdleTimeoutMs` as well”.
+  * 2026-10-28: one attempt cut at **600.043 s** by `TIMEOUT: "Request timed out."` —
+    the openai SDK's `timeoutMs` default (600 s), in the headers phase. Raise it too:
+    see “The four clocks” (clock 4).
 
-  A full audit of **9,724 attempts across every session on this machine** finds **zero**
-  attempts with an inter-chunk gap ≥ 300 s. The largest silence ever measured is
-  **277.0 s** (2026-10-12, *before* the plugin, and it succeeded), while the nine
-  pre-fix failures died at **304.6–305.4 s**. Those two numbers bracket undici's 300 s
-  default almost exactly — which is the mechanism, demonstrated from both sides.
+You can check whether a stall was actually survived — rather than a long request that
+streamed continuously — with one command:
 
-  So the acceptance test is still open: one silence gap **> 300 s** that completes
-  end-to-end. It also needs `streamIdleTimeoutMs` raised (see the section below).
-  `scripts/audit-session-gaps.mjs` answers the question in one command:
-
-  ```bash
-  node scripts/audit-session-gaps.mjs ~/.dsh/sessions --min-gap-s=250
-  # -> lists attempts by largest inter-chunk gap, and how many reached >= 300 s
-  ```
-
-* **First witnessed survival — 2026-10-28.** One attempt sat silent for **607.1 s**
-  mid-stream (`21:56:49 → 22:06:57`), was **not** retried, and completed normally
-  (`tool-calls`, 754.0 s total, 18,156 output tokens). Clocks 2 and 3 both had to hold
-  for that: undici would have killed it at ~304 s and a 300 s watchdog at 300 s.
-* **The next wall, found the same evening.** A different attempt died at **600.043 s**
-  with `TIMEOUT: "Request timed out."` — the openai SDK's `timeoutMs` default (600 s)
-  firing in the headers phase; the platform logged `499` + failure because the client
-  closed before anything was generated. Fix: set `timeoutMs` on the route (clock 4 in
-  “The four clocks” below). Note the message differs from clock 3
-  (`Request timed out.` vs `pi-ai stream idle timeout after Nms`).
+```bash
+node scripts/audit-session-gaps.mjs ~/.dsh/sessions --min-gap-s=250
+# -> lists attempts by largest inter-chunk gap, and how many reached >= 300 s
+```
 
 If a request still dies during a long silence, compare the gap length and the message:
 **304–305 s** points at an undici default clock somewhere in the stack; **exactly 300 s**
@@ -155,22 +141,17 @@ server/gateway idle limit — which this plugin does not address.
 
 ## Install
 
-> **Not on npm yet.** This package has not been published to the npm registry, so
-> `npm install dsh-stream-timeout-fix` — and `dsh plugin … add dsh-stream-timeout-fix`
-> — will 404 for now. Use the repository recipe immediately below; the npm recipes
-> start working after the first publish.
-
 **Requires Node ≥ 22.19** — that is the `undici` dependency's engine requirement
 (`engines.node >= 22.19.0`). Any DSH build able to mount this plugin already bundles
 undici 8.x itself, so this matches the real deployment range; on Node 20 the import
 fails instead of silently misbehaving.
 
-### From this repository (works today)
+### Install from this repository
 
 ```bash
 git clone https://github.com/SundaeYAGO/dsh-stream-timeout-fix
 cd dsh-stream-timeout-fix
-npm install     # provides the `undici` dependency the plugin imports
+npm install     # fetches the `undici` dependency the plugin imports
 ```
 
 Then mount the checkout as a local bundle in your profile:
@@ -179,29 +160,13 @@ Then mount the checkout as a local bundle in your profile:
    `"dsh-stream-timeout-fix": "link:<absolute path to the checkout>"` to `dependencies`;
 2. append `"dsh-stream-timeout-fix"` to `dsh.profile.bundles`;
 3. install/link it in the profile directory (`pnpm install`, which creates the
-   `node_modules` link) and restart DSH.
+   `node_modules` link) and restart DSH — profiles that support live bundle application
+   mount it without a restart.
 
 The package's own `cordis.patch.yml` mounts the plugin row, so no manual profile-patch
 edit is needed. If your DSH CLI accepts git specs (the same form other DSH plugins use),
 `dsh plugin --profile <profile> add github:SundaeYAGO/dsh-stream-timeout-fix` should
 perform those three steps for you.
-
-### From npm (after the first publish)
-
-With the DSH CLI (the bundle patch mounts the plugin row automatically — no manual
-profile patch edit):
-
-```bash
-dsh plugin --profile <profile-name> add dsh-stream-timeout-fix
-```
-
-Manually, in the profile directory (`~/.dsh/profiles/<profile>`):
-
-1. add the dependency: `"dsh-stream-timeout-fix": "^1.0.0"` (then install), and
-2. append `"dsh-stream-timeout-fix"` to `dsh.profile.bundles` in `package.json`.
-
-Then restart DSH (or check your version's live-apply behaviour — this plugin also
-hot-mounts on profiles that support live bundle application).
 
 ## Verify
 

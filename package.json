@@ -8,23 +8,11 @@
     ".": "./index.js",
     "./package.json": "./package.json"
   },
-  "files": [
-    "index.js",
-    "cordis.patch.yml",
-    "README.md",
-    "README.zh-CN.md",
-    "LICENSE",
-    "CHANGELOG.md",
-    "PROVENANCE.md",
-    "test",
-    "scripts"
-  ],
   "engines": {
     "node": ">=22.19.0"
   },
   "scripts": {
-    "test": "node --test && node scripts/check-content-encoding.mjs",
-    "prepublishOnly": "npm test"
+    "test": "node --test && node scripts/check-content-encoding.mjs"
   },
   "repository": {
     "type": "git",

@@ -21,10 +21,11 @@ TypeError: terminated        (cause: BodyTimeoutError, UND_ERR_BODY_TIMEOUT)
 >
 > **维护声明**：作者出于**自用目的**编写，顺手开源给可能遇到同样问题的人。
 > **不保证持续维护**——issue / PR 可能不会及时处理，也没有任何支持承诺。
-> 插件本体约 120 行，安装前请自行过一遍代码。实际观测到的范围见下文「验证状态」。
+> 插件本体约 120 行，安装前请自行过一遍代码。下文「验证状态」里已有**实测确认**：
+> 一次持续 **607 秒**的静默被成功挺过。
 >
-> **尚未发布到 npm**：`dsh-stream-timeout-fix` 目前不在 npm registry 上，
-> 请先从本仓库安装——见[安装](#安装)一节。
+> **分发方式**：**不发 npm 包**——这只是一个小补丁，不值得单独发个包。
+> 请直接从本仓库安装，见[安装](#安装)一节。
 
 ---
 
@@ -80,57 +81,43 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
   `Symbol.for('undici.globalDispatcher.1')` 槽里，所以 undici 8.x 创建的 `Agent`
   会被 Node 内置 `fetch`（undici 7.x）认账。
 
-## 验证状态（信任它之前请先读）
+## 验证状态 —— 已确认有效
 
-本插件是**先诊断、后编写**的：它由受控的本地复现 + 自带测试套件证明，
-而**不是**由真实场景证明的：
+本插件针对的失败已经消失，而且**已经有真实的 >300 秒静默端到端存活**。按证据强度排序：
 
+* **现场确认（2026-10-28）**：一次尝试在流中途静默 **607.1 秒**
+  （21:56:49 → 22:06:57），**一次重试都没有触发**，正常完成（`tool-calls`，
+  总时长 754.0 秒，输出 18,156 token）。这要求 undici 的 `bodyTimeout` **与**
+  pi-ai 的 `streamIdleTimeoutMs` **同时**放行：任一保持 300 秒默认值，它都会在
+  ~300–304 秒被杀掉。**验收测试通过。**
 * **本地已复现**：流在中途静默后，会在「最后字节 + 约 304 秒」处被 undici 默认时钟
   以 `TypeError: terminated`（`UND_ERR_BODY_TIMEOUT`）杀掉；换成插件的 Agent 后，
   同样的静默能正常读完（见 `npm test`、`scripts/reproduce-300s.mjs`）。
 * **指纹吻合**：促成这个插件的每一次线上失败，静默间隔都是 304.6–305.4 秒、
   `message: "terminated"`，且都发生在内容开始之后、从不在响应头阶段。
-* **现场数据（2026-10-13 → 2026-10-18）**：11 个会话里共 19 次记录在案的失败
+* **现场数据（2026-10-13 → 2026-10-28）**：安装之后记录在案的全部失败里
   （按 `stream finish` 事件结构统计，不是按日志文本），**目标失败类一次都没有复现**——
   即 `TRANSPORT` 且 cause 链为 `TypeError: terminated` → `BodyTimeoutError`
-  （`UND_ERR_BODY_TIMEOUT`）。剩下的全是 AUTH / `SERVER 503` / `INVALID_REQUEST 404` /
-  `EMPTY_RESPONSE`，以及下一条说的新墙。
-* **剩下的 300 秒墙属于 DSH，不属于 undici**。2026-10-18 有两次尝试分别在
-  **300.02 秒**与 **300.04 秒**被 `pi-ai stream idle timeout after 300000ms`
-  （`code: TIMEOUT`）切断——而此时本插件的 undici 上限已经是 30 分钟。原因：那条路由
-  没有设置 `streamIdleTimeoutMs`，走默认 `300000`。所以**在把它调大之前，静默上限仍然是
-  300 秒**（见「同时调大 `streamIdleTimeoutMs`」）。好处是：错误码从此是诚实的
-  `TIMEOUT`，不再是误导性的 `TRANSPORT`。
-* **仍不是"亲眼看到它挺过去"——但现在是测量出来的，不是猜的**。有两条长请求完成了，
-  却都**没有真正停顿**：
-  * **2026-10-18，314.23 秒**（输入 438,236 / 输出 3,791）：最长静默 **约 210 秒**，
-    仍低于旧上限；
-  * **2026-10-19，756.84 秒**（输入 512,276 / 输出 17,083，含 9,006 个逐字时间戳）：
-    首字 **91.2 秒**后才到，随后**最大分片间隔只有 2.6 秒**——这是一次持续吐字
-    12.6 分钟的长生成。长，但没有 stall，所以**同样不是证据**。
+  （`UND_ERR_BODY_TIMEOUT`）。剩下的只有 AUTH / `SERVER 503` / `INVALID_REQUEST 404` /
+  `EMPTY_RESPONSE` / `TIMEOUT`，而那些 `TIMEOUT` 来自**别的钟**，不是 undici。
+* **300 秒窗口被两侧夹住**：对**本机全部会话的 9,724 次尝试**（截至 2026-10-19）做审计，
+  当时**没有任何一次出现过 ≥300 秒的分片间隔**；历史最长存活静默是 **277.0 秒**
+  （2026-10-12，**装插件之前**），而修复前的 9 次失败死在 **304.6–305.4 秒**。
+  调大上限之后，607.1 秒存活（见第一条）。
+* **剩下的上限在 DSH 侧，且已写进文档**：
+  * 2026-10-18：两次尝试分别在 **300.02 秒** / **300.04 秒**被
+    `pi-ai stream idle timeout after 300000ms` 切断——那条路由没有设
+    `streamIdleTimeoutMs`（默认 `300000`）。要调大：见「同时调大 `streamIdleTimeoutMs`」；
+  * 2026-10-28：一次尝试在 **600.043 秒**被 `TIMEOUT: "Request timed out."` 切断——
+    openai SDK 的 `timeoutMs` 默认 600 秒，发生在响应头阶段。也要调大：见
+    「能切断一条流的四层钟」第 4 条。
 
-  对**本机全部会话的 9,724 次尝试**做完整审计：**没有任何一次出现过 ≥300 秒的分片间隔**。
-  历史最长静默是 **277.0 秒**（2026-10-12，**装插件之前**，且成功），而修复前的 9 次失败
-  死在 **304.6–305.4 秒**——这两个数字几乎正好把 undici 的 300 秒默认值夹在中间，
-  机制从两侧都得到了印证。
+想判断某次到底是「真挺过了 stall」还是「只是流得久（一直在吐字）」，一条命令即可：
 
-  所以验收测试仍未达成：需要**一次 >300 秒的静默间隔**端到端跑完，而这同时要求把
-  `streamIdleTimeoutMs` 调大（见「同时调大 `streamIdleTimeoutMs`」）。一条命令即可回答：
-
-  ```bash
-  node scripts/audit-session-gaps.mjs ~/.dsh/sessions --min-gap-s=250
-  # -> 按最大分片间隔列出各次尝试，并统计有多少次达到 >= 300 秒
-  ```
-
-* **首个亲眼见证的存活样本（2026-10-28）**：一次尝试在流中途静默 **607.1 秒**
-  （21:56:49 → 22:06:57），**没有触发重试**，正常完成（`tool-calls`，总时长 754.0 秒，
-  输出 18,156 token）。这要求第 2、3 层钟同时放行：undici 会在约 304 秒杀掉它，
-  300 秒的看门狗会在 300 秒杀掉它。
-* **同晚发现的下一道墙**：另一次尝试在 **600.043 秒**死于
-  `TIMEOUT: "Request timed out."`——这是 **openai SDK 的 `timeoutMs` 默认 600 秒**
-  在「等响应头」阶段触发；平台侧因此记录 `499` + 失败（客户端在产生任何内容之前就断开）。
-  修法：在路由上显式设 `timeoutMs`（见下面「四层钟」的第 4 条）。注意它的报错文本与
-  第 3 层不同（`Request timed out.` vs `pi-ai stream idle timeout after Nms`）。
+```bash
+node scripts/audit-session-gaps.mjs ~/.dsh/sessions --min-gap-s=250
+# -> 按最大分片间隔列出各次尝试，并统计有多少次达到 >= 300 秒
+```
 
 若某个请求在长静默中仍然失败，请对比间隔长度**与报错文本**：**304–305 秒**指向栈里某个
 undici 默认时钟；**恰好 300 秒**且报 `pi-ai stream idle timeout` 指向 DSH 自己的看门狗；
@@ -139,16 +126,11 @@ undici 默认时钟；**恰好 300 秒**且报 `pi-ai stream idle timeout` 指�
 
 ## 安装
 
-> **尚未发布到 npm。** 本包还没有发布到 npm registry，因此
-> `npm install dsh-stream-timeout-fix`（以及
-> `dsh plugin … add dsh-stream-timeout-fix`）目前会 404。
-> 请先用下面的「从本仓库安装」；npm 方式在首次发布之后才可用。
-
 **要求 Node ≥ 22.19**——这是 `undici` 依赖的 engines 约束（`engines.node >= 22.19.0`）。
 任何能挂载本插件的 DSH 版本本身就内置了 undici 8.x，因此这与真实部署范围一致；
 在 Node 20 上导入会直接失败，而不是悄悄行为异常。
 
-### 从本仓库安装（现在就能用）
+### 从本仓库安装
 
 ```bash
 git clone https://github.com/SundaeYAGO/dsh-stream-timeout-fix
@@ -162,27 +144,12 @@ npm install     # 装上插件 import 的 undici 依赖
    `"dsh-stream-timeout-fix": "link:<checkout 的绝对路径>"`；
 2. 把 `"dsh-stream-timeout-fix"` 追加进 `dsh.profile.bundles`；
 3. 在 profile 目录执行安装/链接（`pnpm install`，它会建好 `node_modules` 链接），
-   然后重启 DSH。
+   然后重启 DSH（支持 live bundle 应用的版本会直接热挂载，无需重启）。
 
 插件自带的 `cordis.patch.yml` 会负责挂载插件行，**无需手改 profile patch**。
 如果你的 DSH CLI 接受 git 规格（其它 DSH 插件用的也是这种写法），
 `dsh plugin --profile <profile> add github:SundaeYAGO/dsh-stream-timeout-fix`
 可以替你完成上面三步。
-
-### 从 npm 安装（首次发布之后）
-
-用 DSH CLI（bundle patch 会自动挂载插件行，**无需手改 profile patch**）：
-
-```bash
-dsh plugin --profile <profile-name> add dsh-stream-timeout-fix
-```
-
-手动方式（在 profile 目录 `~/.dsh/profiles/<profile>`）：
-
-1. 加依赖：`"dsh-stream-timeout-fix": "^1.0.0"`（然后安装）；
-2. 把 `"dsh-stream-timeout-fix"` 追加进 `package.json` 的 `dsh.profile.bundles`。
-
-随后重启 DSH（或看你所用版本是否支持 live bundle 应用——支持时本插件会热挂载）。
 
 ## 验证
 

@@ -5,11 +5,27 @@ All notable changes to this project are documented in this file.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this
 project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Status of `1.0.0`:** initial release. It has **not** been published to npm yet, so
-> install it from this repository in the meantime (README → Install → "From this
-> repository"). And — as documented under "Validation status" in the README — it has not
-> yet been exercised by a real-world 300+ s stall. The first genuine stall is the
-> acceptance test.
+> **Status:** **confirmed effective** as of 2026-10-28 — a real **607.1 s** mid-stream
+> silence survived end-to-end with no retry (see README → "Validation status"). The
+> plugin is distributed **from this repository only**; there is no npm package, and none
+> is planned (it is a small single-purpose patch).
+
+## [Unreleased]
+
+### Changed
+
+- **Validation status is now "confirmed effective".** On 2026-10-28 an attempt sat silent
+  for **607.1 s** mid-stream and completed normally with **zero retries** (`tool-calls`,
+  754.0 s total, 18,156 output tokens). That required both this plugin's `bodyTimeout`
+  *and* the route's `streamIdleTimeoutMs` to be raised above 300 s.
+- **Distribution is repository-only.** All npm-publishing material was removed — the
+  "not on npm yet" notices, the "from npm" install recipe, and the publisher-only fields
+  in `package.json` (`prepublishOnly`, `files`) — because a small single-purpose patch
+  does not warrant a package. Install from this repository.
+- Documented **"The four clocks that can cut a stream"**: undici's `headersTimeout` and
+  `bodyTimeout` (this plugin), `streamIdleTimeoutMs`, and the openai SDK's `timeoutMs`
+  (default 600 s, surfaces as `Request timed out.`) — the last one cut a request at
+  **600.043 s** on 2026-10-28.
 
 ## [1.0.0] - 2026-10-13
 
@@ -43,8 +59,7 @@ provider that hung up.
   0.2.1+ records, lists attempts by largest gap, and reports how many reached ≥ 300 s.
   This is what separates "a long request" from "a stall that was survived".
 - Bilingual documentation (English + 简体中文) with a language switcher.
-- GitHub Actions CI on Node 22 and 24, with `prepublishOnly` gating `npm publish` on the
-  test suite.
+- GitHub Actions CI on Node 22 and 24, running the test suite on every push.
 
 ### Changed
 
