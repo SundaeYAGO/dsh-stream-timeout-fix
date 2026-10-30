@@ -122,9 +122,20 @@ setGlobalDispatcher(new Agent({ bodyTimeout: 1_800_000, headersTimeout: 600_000 
   # -> 按最大分片间隔列出各次尝试，并统计有多少次达到 >= 300 秒
   ```
 
-若某个请求在长静默中仍然失败，请对比间隔长度：**304–305 秒**指向栈里某个 undici 默认
-时钟；**恰好 300 秒**且报 `pi-ai stream idle timeout` 指向 DSH 自己的看门狗；
-其他数值则指向服务端/网关的空闲上限——那不在本插件能解决的范围内。
+* **首个亲眼见证的存活样本（2026-10-28）**：一次尝试在流中途静默 **607.1 秒**
+  （21:56:49 → 22:06:57），**没有触发重试**，正常完成（`tool-calls`，总时长 754.0 秒，
+  输出 18,156 token）。这要求第 2、3 层钟同时放行：undici 会在约 304 秒杀掉它，
+  300 秒的看门狗会在 300 秒杀掉它。
+* **同晚发现的下一道墙**：另一次尝试在 **600.043 秒**死于
+  `TIMEOUT: "Request timed out."`——这是 **openai SDK 的 `timeoutMs` 默认 600 秒**
+  在「等响应头」阶段触发；平台侧因此记录 `499` + 失败（客户端在产生任何内容之前就断开）。
+  修法：在路由上显式设 `timeoutMs`（见下面「四层钟」的第 4 条）。注意它的报错文本与
+  第 3 层不同（`Request timed out.` vs `pi-ai stream idle timeout after Nms`）。
+
+若某个请求在长静默中仍然失败，请对比间隔长度**与报错文本**：**304–305 秒**指向栈里某个
+undici 默认时钟；**恰好 300 秒**且报 `pi-ai stream idle timeout` 指向 DSH 自己的看门狗；
+**`Request timed out.`** 指向 SDK 的 `timeoutMs`（响应头阶段）；其他数值则指向服务端/网关
+的空闲上限——那不在本插件能解决的范围内。
 
 ## 安装
 
@@ -224,6 +235,28 @@ providers:
 注意 pi-ai 的计时**从请求下发开始，含首个 token 之前的等待**：巨大 prompt 的
 慢预填充与流中途停顿消耗的是同一份预算。（和下面的重试策略在同一个 profile
 patch 里，只是不同的键。）
+
+## 能切断一条流的四层钟
+
+本插件只管前两层。后两层在 `dsh-llm-pi-ai` 里，**同样值得配置**——2026-10-28
+真正切断那条请求的就是第 4 层：
+
+| # | 时钟 | 归属 | 作用阶段 | 默认值 |
+|---|---|---|---|---|
+| 1 | `headersTimeout` | undici（本插件） | 等响应头 | 300 s → 本插件 **600 s** |
+| 2 | `bodyTimeout` | undici（本插件） | 分片之间的静默 | 300 s → 本插件 **1800 s** |
+| 3 | `streamIdleTimeoutMs` | `dsh-llm-pi-ai` | 静默（含首字之前） | 300 000 ms |
+| 4 | `timeoutMs` | `dsh-llm-pi-ai` → openai SDK | **等响应头**（`Request timed out.`，code `TIMEOUT`） | SDK 默认 **600 000 ms** |
+
+第 4 层最阴险：它是 OpenAI SDK 的请求超时，报错文本是 `Request timed out.` /
+`TIMEOUT`，极易被误判成平台故障。建议两层一起显式设：
+
+```yaml
+providers:
+  your-provider:
+    streamIdleTimeoutMs: 1800000   # 第 3 层——静默间隔，含首字之前
+    timeoutMs: 1800000             # 第 4 层——响应头阶段（SDK 请求超时）
+```
 
 ## 费用与计费（请务必阅读）
 

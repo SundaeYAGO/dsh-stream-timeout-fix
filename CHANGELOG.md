@@ -89,6 +89,13 @@ provider that hung up.
   undici's clocks, and that the per-route `streamIdleTimeoutMs` (default `300000`) must
   be raised too before a >300 s silence can survive — otherwise only the error code
   improves (honest `TIMEOUT` instead of `TRANSPORT`).
+- "The four clocks that can cut a stream": `headersTimeout` / `bodyTimeout` (this
+  plugin), `streamIdleTimeoutMs` and `timeoutMs` (`dsh-llm-pi-ai` → openai SDK, default
+  600 s, surfaces as `Request timed out.` / `TIMEOUT` in the headers phase). Field
+  evidence from 2026-10-28: one attempt survived a **607.1 s** mid-stream silence with no
+  retry (754.0 s, `tool-calls`) — the first witnessed >300 s survival — while another
+  died at **600.043 s** on the SDK `timeoutMs`, which the platform logged as `499` +
+  failure.
 - "What this plugin does not do" (no retry logic, no provider/auth/routing
   configuration, no cost control, no stream-watchdog change) and "Cost and billing": a
   surviving stall keeps the provider generating and billing, and unlimited retries

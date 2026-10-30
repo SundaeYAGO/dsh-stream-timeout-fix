@@ -136,9 +136,21 @@ local reproduction plus its own test suite — **not** by a real-world stall:
   # -> lists attempts by largest inter-chunk gap, and how many reached >= 300 s
   ```
 
-If a request still dies during a long silence, compare the gap length: **304–305 s**
-points at an undici default clock somewhere in the stack, **exactly 300 s** with
-`pi-ai stream idle timeout` points at DSH's own watchdog, and anything else points at a
+* **First witnessed survival — 2026-10-28.** One attempt sat silent for **607.1 s**
+  mid-stream (`21:56:49 → 22:06:57`), was **not** retried, and completed normally
+  (`tool-calls`, 754.0 s total, 18,156 output tokens). Clocks 2 and 3 both had to hold
+  for that: undici would have killed it at ~304 s and a 300 s watchdog at 300 s.
+* **The next wall, found the same evening.** A different attempt died at **600.043 s**
+  with `TIMEOUT: "Request timed out."` — the openai SDK's `timeoutMs` default (600 s)
+  firing in the headers phase; the platform logged `499` + failure because the client
+  closed before anything was generated. Fix: set `timeoutMs` on the route (clock 4 in
+  “The four clocks” below). Note the message differs from clock 3
+  (`Request timed out.` vs `pi-ai stream idle timeout after Nms`).
+
+If a request still dies during a long silence, compare the gap length and the message:
+**304–305 s** points at an undici default clock somewhere in the stack; **exactly 300 s**
+with `pi-ai stream idle timeout` points at DSH's own watchdog; **`Request timed out.`**
+points at the SDK's `timeoutMs` (headers phase); anything else points at a
 server/gateway idle limit — which this plugin does not address.
 
 ## Install
@@ -248,6 +260,29 @@ providers:
 Note that pi-ai counts silence **from request dispatch, including the wait for the
 first token**: a huge prompt with a slow prefill consumes the same budget as a
 mid-stream stall. (Same profile patch as the retry policy below — different key.)
+
+## The four clocks that can cut a stream
+
+This plugin owns the first two. The other two live in `dsh-llm-pi-ai` and are **also**
+worth configuring — one of them is what actually cut a request on 2026-10-28:
+
+| # | Clock | Owner | Where it bites | Default |
+|---|---|---|---|---|
+| 1 | `headersTimeout` | undici (this plugin) | no response headers yet | 300 s → **600 s** here |
+| 2 | `bodyTimeout` | undici (this plugin) | silence between chunks | 300 s → **1800 s** here |
+| 3 | `streamIdleTimeoutMs` | `dsh-llm-pi-ai` | silence, first byte included | 300 000 ms |
+| 4 | `timeoutMs` | `dsh-llm-pi-ai` → openai SDK | **headers phase** (`Request timed out.`, code `TIMEOUT`) | SDK default **600 000 ms** |
+
+Clock 4 is the sneaky one: it is the OpenAI SDK's request timeout and it surfaces as
+`Request timed out.` / `TIMEOUT` — easy to mistake for a platform failure. Set both on
+the route:
+
+```yaml
+providers:
+  your-provider:
+    streamIdleTimeoutMs: 1800000   # clock 3 — idle gaps, first byte included
+    timeoutMs: 1800000             # clock 4 — headers phase (SDK request timeout)
+```
 
 ## Cost and billing (please read)
 
